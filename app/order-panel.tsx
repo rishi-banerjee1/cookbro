@@ -1,14 +1,14 @@
 'use client';
 import {useState} from 'react';
 import {ArrowUpRight,Check,Copy,ShoppingBag,Info} from 'lucide-react';
-import {orderIdeas,orderText,weekOrderCount,basketItems} from '@/lib/orders';
+import {orderIdeas,orderText,weekOrderCount,basketItems,hasBengaluruExamples} from '@/lib/orders';
 import {preferences} from '@/lib/preferences';
 import {dateLabel,type Meal,type State} from '@/lib/food';
 import {Select,SelectContent,SelectItem,SelectTrigger,SelectValue} from '@/components/ui/select';
 import {toast} from 'sonner';
 export default function OrderPanel({state,date,busy,act}:{state:State|null;date:string;busy:boolean;act:(p:Record<string,unknown>)=>Promise<State|null>}){
  const [meal,setMeal]=useState<Meal>('dinner');const [subtotal,setSubtotal]=useState(''),[fees,setFees]=useState('');
- const plan=state?.plans[date];const prefs=plan?.preferences||preferences(state);const local=prefs.postalCode==='560035';const counted=state?weekOrderCount(state.plans,date):0;
+ const plan=state?.plans[date];const prefs=plan?.preferences||preferences(state);const local=hasBengaluruExamples(prefs);const counted=state?weekOrderCount(state.plans,date):0;
  const haveTotal=subtotal!==''&&fees!=='';const total=Math.round((Number(subtotal)+Number(fees))*100)/100;
  return <><div className="intro"><div><p className="eyebrow">SOME DAYS, LET SOMEONE ELSE COOK.</p><h1>A night off.</h1><p>{local?'Published menu ideas near '+prefs.postalCode+', '+prefs.city:'Family basket ideas for '+(prefs.city||'your area')}. Up to ₹{prefs.budget.toLocaleString('en-IN')} all in.</p></div><span className="order-count"><ShoppingBag size={20}/>{counted} of {prefs.orderMealsPerWeek} weekly order-in meals planned</span></div><div className="order-context"><div><strong>{dateLabel(date)}</strong><p>Choose any meal. No fixed order-in days.</p></div><Select value={meal} onValueChange={value=>setMeal(value as Meal)}><SelectTrigger className="meal-select" aria-label="Meal to order"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="breakfast">Breakfast</SelectItem><SelectItem value="lunch">Lunch</SelectItem><SelectItem value="dinner">Dinner</SelectItem></SelectContent></Select><span className="small-note">Change the date in Meal planner.</span></div>
  <div className="order-disclaimer"><Info size={20}/><p>These are suggested baskets from published menus, not live quotes. {local?'':'Restaurant examples are from Bengaluru; use these dishes as a guide and find a local outlet.'} Set your exact address in Zomato and check availability, portion sizes and the final total before paying. Cook Bro does not place orders.</p></div>

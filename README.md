@@ -43,15 +43,42 @@ Production builds live in `dist/server` and `dist/client`. The API needs the D1 
 
 ### Deploying your own copy
 
-This application currently uses the Sites trusted authentication gateway. Register your own site, set its returned project ID in `.openai/hosting.json`, provision the `DB` binding, apply the bundled migration, and deploy the compiled Worker and client assets through that gateway. Never reuse another deployment’s project ID or database.
+Cook Bro supports the Sites gateway and standalone Cloudflare Workers. The standalone app uses private device links for sign-in. It does not require Cloudflare Zero Trust, a payment card for an authentication service, or another identity-provider account. Cloudflare hosting itself remains subject to the account's plan and limits.
 
-For other hosting providers, replace `app/chatgpt-auth.ts` with a verified server-side session integration before public deployment. **Do not expose this Worker directly while trusting caller-supplied `oai-authenticated-user-*` headers.** The current production authentication boundary is the Sites gateway; the localhost mock is not present in the production Worker.
+For standalone Cloudflare:
+
+1. Verify your account with the installed Wrangler CLI (`wrangler whoami`). Create a D1 database and record its returned ID.
+2. Copy `cloudflare.example.json` to ignored `cloudflare.local.json` and fill in your account, database and Worker identifiers.
+3. Build, migrate and deploy:
+
+```sh
+npm run build
+node scripts/prepare-cloudflare.mjs
+node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 migrations apply DB --remote --config dist/server/wrangler.json
+node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js deploy --config dist/server/wrangler.json
+node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js secret put COOKBRO_OWNER_EMAIL --config dist/server/wrangler.json
+```
+
+The owner email is an account label configured by the operator, not email verification. Set `COOKBRO_INITIAL_PREFERENCES` as another Worker secret if desired. No device is admitted until it redeems a private sign-in link. Initial access and recovery require an authenticated deployment administrator:
+
+```sh
+node scripts/create-device-link.mjs https://YOUR-WORKER.YOUR-SUBDOMAIN.workers.dev
+node scripts/open-device-link.mjs
+```
+
+The first command inserts a one-time token hash into D1 and saves the private link in ignored `.sites-runtime/device-link.json`. The second prints a temporary loopback URL that redirects once to the app without printing the credential. Open that loopback URL on the same computer within two minutes. The private link expires after ten minutes.
+
+After connecting, open **Account → Connect another device** to create a private link for a phone, tablet or another computer. Links work once, expire after ten minutes and grant full access to this one household. Only share them with trusted devices. Existing devices can list and remove other sessions. Sessions last up to 90 days; signing out or removing a device revokes its server-side session immediately. If every device is lost or signed out, the deployment administrator can issue another link with the commands above. There is no public registration or email recovery endpoint.
+
+This is a single-household app. The link is a bearer credential, not an emailed verification challenge or a password. Tokens have 256 bits of randomness; only SHA-256 hashes are stored. A successful claim atomically consumes the link and sets a separate Secure, HttpOnly, SameSite=Strict session cookie. The frontend removes the one-time URL fragment from history before exchanging it; tokens are never stored in localStorage.
+
+After every rebuild, rerun `prepare-cloudflare.mjs` before deploying because builds regenerate the Wrangler output. Sites deployment continues to use its original gateway mode; standalone deployment explicitly sets `COOKBRO_AUTH_MODE=device-link` and ignores Sites identity headers.
 
 An optional server-only `COOKBRO_INITIAL_PREFERENCES` variable accepts JSON matching `preferencesSchema` in `lib/preferences.ts`. Use it for a private deployment’s initial household defaults. Set it as a secret in the host environment, never as a frontend variable or committed file. It applies to new households or old profiles without saved preferences; saved settings take precedence. `.env*`, `.dev.vars*`, database files and runtime directories are ignored.
 
 ### Apple devices
 
-On iPhone or iPad, open your deployed HTTPS app in Safari and use **Share → Add to Home Screen**. On macOS Sonoma or later, use **File → Add to Dock**. Sign in with the same account on each device. An internet connection is required for household data. The service worker caches only a generic offline page, not menus, preferences or authenticated responses. This is a web app, not a native App Store application.
+On iPhone or iPad, open your deployed HTTPS app in Safari and use **Share → Add to Home Screen**. On macOS Sonoma or later, use **File → Add to Dock**. Connect each device to the same household using Account → Connect another device. An internet connection is required for household data. The service worker caches only a generic offline page, not menus, preferences or authenticated responses. This is a web app, not a native App Store application.
 
 ## Zomato integration status
 
@@ -60,7 +87,7 @@ Cook Bro does not log in to Zomato, read order history, scrape private endpoints
 - [Official partner prerequisites](https://www.zomato.com/developer/integration/docs/getting-started/prerequisites/)
 - [Official order-management documentation](https://www.zomato.com/developer/integration/docs/api-documentation/order-management/)
 
-The built-in examples reference published restaurant menus around Bengaluru’s Sarjapur Road. That locality receives direct restaurant links; other locations receive generic basket ideas and the Zomato homepage. Availability, pricing, delivery area and restaurant portions must be checked at checkout. The app never claims a basket is under budget until the user enters the cart subtotal and all fees. These are examples, not a live restaurant search.
+The built-in examples reference published restaurant menus around Bengaluru’s Sarjapur Road. A household that selects Bengaluru receives those direct restaurant links; other locations receive generic basket ideas and the Zomato homepage. Availability, pricing, delivery area and restaurant portions must be checked at checkout. The app never claims a basket is under budget until the user enters the cart subtotal and all fees. These are examples, not a live restaurant search.
 
 ## Validation
 
@@ -68,6 +95,8 @@ The built-in examples reference published restaurant menus around Bengaluru’s 
 ./node_modules/.bin/tsc --noEmit
 ./node_modules/.bin/esbuild tests/planner.test.ts --bundle --platform=node --outfile=/tmp/cookbro-tests.cjs
 node /tmp/cookbro-tests.cjs
+./node_modules/.bin/esbuild tests/device-auth.test.ts --bundle --platform=node --format=esm --outfile=/tmp/cookbro-device-tests.mjs
+node /tmp/cookbro-device-tests.mjs
 node tests/api.test.mjs
 npm run build
 ```

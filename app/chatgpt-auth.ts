@@ -1,3 +1,5 @@
+import {env} from 'cloudflare:workers';
+import {findSession,readSessionToken,ownerId} from '@/lib/device-auth';
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
@@ -20,6 +22,8 @@ const CALLBACK_PATH = "/callback";
 
 export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
   const requestHeaders = await headers();
+  if(env.COOKBRO_AUTH_MODE==='device-link'){const session=env.DB&&env.COOKBRO_OWNER_EMAIL?await findSession(env.DB,readSessionToken(requestHeaders.get('cookie'))):null;return session?{userId:ownerId,email:env.COOKBRO_OWNER_EMAIL!,displayName:env.COOKBRO_OWNER_EMAIL!,fullName:null}:null;}
+  if(env.COOKBRO_AUTH_MODE&&env.COOKBRO_AUTH_MODE!=='sites')return null;
   const userId = requestHeaders.get(USER_ID_HEADER);
   const email = requestHeaders.get(USER_EMAIL_HEADER);
   if (!userId || !email) return null;
@@ -45,6 +49,7 @@ export async function requireChatGPTUser(
   const user = await getChatGPTUser();
   if (user) return user;
 
+  if(env.COOKBRO_AUTH_MODE==='device-link')redirect('/sign-in');
   redirect(chatGPTSignInPath(returnTo));
 }
 

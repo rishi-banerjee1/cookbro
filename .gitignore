@@ -47,3 +47,5 @@ next-env.d.ts
 
 .dev.vars*
 *.tsbuildinfo
+
+/cloudflare.local.json

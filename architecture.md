@@ -6,7 +6,7 @@ Cook Bro is a stateful web application with deterministic meal planning. The pri
 
 ```mermaid
 flowchart LR
-  User[Phone, tablet or desktop] --> Gateway[Sites authentication gateway]
+  User[Phone, tablet or desktop] --> Gateway[Sites gateway or private device session]
   Gateway --> Worker[Vinext / React Worker]
   Worker --> UI[Planner, household settings, order ideas]
   UI --> API[Same-origin household API]
@@ -21,10 +21,11 @@ flowchart LR
 
 | Component | Responsibility |
 | --- | --- |
-| `app/page.tsx`, `app/chatgpt-auth.ts` | Require trusted gateway identity for the page and API |
+| `app/page.tsx`, `app/chatgpt-auth.ts` | Require Sites gateway identity or a valid private-device session |
 | `app/planner.tsx` | Date selection, meals, substitutions, shopping, confirmation and export |
 | `app/household-form.tsx` | Inspectable preference editing with schema validation |
 | `app/order-panel.tsx` | Ad hoc order-in selection, portion estimates, cost comparison and outbound links |
+| `lib/device-auth.ts` | Issue and atomically claim device links; validate hashed D1 sessions |
 | `lib/preferences.ts` | Shared preference schema, neutral defaults and time-zone date helper |
 | `lib/food.ts` | Catalogue, filters, deterministic ranking, swaps, quantity scaling and message generation |
 | `lib/orders.ts` | Static basket examples, rounded portion estimates and weekly counting |
@@ -37,6 +38,8 @@ Data is stored online and scoped to one authenticated account. Devices on that a
 ### Deployment topology
 
 Vite and Vinext compile the React application to a Cloudflare Worker and static client assets. The bundled build plugin copies the hosting manifest and Drizzle migrations into `dist/.openai`. Sites packages these with `dist/server` and `dist/client`; production migrations are applied during deployment.
+
+Standalone Cloudflare deployment uses `scripts/prepare-cloudflare.mjs` to set the Worker name, account, D1 binding and device-link authentication mode. Deployment identifiers are kept in ignored `cloudflare.local.json`; the owner email label and private defaults are Worker secrets. No Zero Trust organization or external login provider is used.
 
 Local development uses Miniflare/D1 persistence and loopback-only mock authentication. Public forks have a neutral hosting manifest without a production project ID. Private instance defaults belong in a host secret, not source code or Git history. Publishing the code does not publish a deployment’s database or make a private site public.
 
@@ -164,7 +167,7 @@ Zomato baskets are static, source-linked examples. Quantities are scaled to cook
 
 ### Security and privacy
 
-Production identity headers are trusted only behind the Sites gateway, which must supply verified identity and prevent caller spoofing. A standalone deployment must replace this adapter with verified sessions. No production local-auth bypass is provided. User IDs never come from the mutation body, and each database operation binds the verified subject.
+In Sites mode, identity headers are trusted only behind the Sites gateway, which must prevent caller spoofing. In standalone mode, those headers are ignored. `lib/device-auth.ts` validates a random session cookie by comparing its SHA-256 hash against an unexpired D1 session. No authentication data is stored in localStorage, and missing configuration fails closed. No production local-auth bypass is provided. User IDs never come from the mutation body, and each database operation binds the verified subject.
 
 Personal profiles and phone numbers live in user-scoped D1 JSON. No medication list is stored. Host-only initial preferences are optional secrets. Source exports omit private hosting identifiers, environment files, runtime databases and private Git history. The service worker does not cache authenticated pages/API data. A remote Wikimedia photo request discloses a normal browser request to Wikimedia; WhatsApp/Zomato are opened only by the user.
 
@@ -179,4 +182,15 @@ Personal profiles and phone numbers live in user-scoped D1 JSON. No medication l
 
 ### Verification
 
-Unit/domain tests exercise 180 generated days, rolling variety, configured chicken/fish schedules, vegetarian exclusion, shared swaps, batch scaling, order-in removal, custom staples, allergy inference, invalid preferences and date boundaries. Local API tests cover anonymous denial, origin rejection, invalid input, saved state, menu locks, immutable preference snapshots and stale writes. TypeScript checks, production builds and desktop/mobile browser checks complete the release checks.
+Unit/domain tests exercise 180 generated days, rolling variety, configured chicken/fish schedules, vegetarian exclusion, shared swaps, batch scaling, order-in removal, custom staples, allergy inference, invalid preferences and date boundaries. Local API tests cover anonymous denial, origin rejection, invalid input, saved state, menu locks, immutable preference snapshots and stale writes. Device authentication tests exercise malformed tokens, hashed storage, two concurrent claims of one link, expiry, replay rejection, cookie flags and session revocation. TypeScript checks, production builds and desktop/mobile browser checks complete the release checks.
+
+
+### Standalone device-link authentication
+
+`device_links` stores `token_hash` (primary key), creation/expiry times and an optional redemption time. `device_sessions` stores a token hash, a short device label and creation/expiry times. Both tokens are independent 256-bit random values. Only hashes are persisted; raw session tokens exist only in HttpOnly cookies. All standalone sessions map to the same `household-owner` record. The configured owner email is a display label, not a verified identity claim.
+
+`POST /api/auth/device` requires an exact same-origin Origin header and rejects cross-site requests. The `claim` action is the only unauthenticated mutation: it consumes an unexpired link with an atomic `UPDATE ... RETURNING`, creates a separate session and sets a Secure, HttpOnly, SameSite=Strict cookie. Replaying a link or racing another claimant fails. `issue` and `revoke` require a valid session. `logout` deletes the current session and expires its cookie. `GET` lists devices only to authenticated users. Device IDs returned to the owner are hashes, never reusable raw session credentials.
+
+A ten-minute link carries its credential in the URL fragment. The sign-in page removes that fragment from history before a same-origin POST exchange. Private pages/API responses use `private, no-store` and `no-referrer`. When an already-connected browser arrives from an external link, the sign-in page checks its existing session with a same-origin request, which avoids asking it to pair again because of SameSite=Strict navigation behavior.
+
+Initial admission and recovery are operator actions: an authenticated Wrangler session inserts a token hash and writes a private ignored link file. A short-lived loopback-only redirect can hand this link to the operator's browser without logging it. Subsequent devices connect using links issued from the Account screen. Links grant full household access, so they must be shared only with trusted devices. Sessions expire after 90 days and are revocable from another connected device. Public sign-up, automatic email delivery, account invitations with narrower roles and multi-household accounts are not implemented.

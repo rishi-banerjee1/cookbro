@@ -8,6 +8,13 @@
       "when": 1790340097199,
       "tag": "0000_strange_magus",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1790400447797,
+      "tag": "0001_daily_giant_man",
+      "breakpoints": true
     }
   ]
 }
