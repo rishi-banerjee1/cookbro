@@ -68,7 +68,7 @@ node scripts/open-device-link.mjs
 
 The first command inserts a one-time token hash into D1 and saves the private link in ignored `.sites-runtime/device-link.json`. The second prints a temporary loopback URL that redirects once to the app without printing the credential. Open that loopback URL on the same computer within two minutes. The private link expires after ten minutes.
 
-After connecting, open **Account → Connect another device** to create a private link for a phone, tablet or another computer. Links work once, expire after ten minutes and grant full access to this one household. Only share them with trusted devices. Existing devices can list and remove other sessions. Sessions last up to 90 days; signing out or removing a device revokes its server-side session immediately. If every device is lost or signed out, the deployment administrator can issue another link with the commands above. There is no public registration or email recovery endpoint.
+After connecting, open **Invite family → Invite a family member** to create a private link for a spouse, phone, tablet or another computer. Links work once, expire after ten minutes and grant full access to this one household. Only share them with trusted devices. Existing devices can list and remove other sessions. Sessions last up to 90 days; signing out or removing a device revokes its server-side session immediately. If every device is lost or signed out, the deployment administrator can issue another link with the commands above. There is no public registration or email recovery endpoint.
 
 This is a single-household app. The link is a bearer credential, not an emailed verification challenge or a password. Tokens have 256 bits of randomness; only SHA-256 hashes are stored. A successful claim atomically consumes the link and sets a separate Secure, HttpOnly, SameSite=Strict session cookie. The frontend removes the one-time URL fragment from history before exchanging it; tokens are never stored in localStorage.
 
@@ -78,7 +78,7 @@ An optional server-only `COOKBRO_INITIAL_PREFERENCES` variable accepts JSON matc
 
 ### Apple devices
 
-On iPhone or iPad, open your deployed HTTPS app in Safari and use **Share → Add to Home Screen**. On macOS Sonoma or later, use **File → Add to Dock**. Connect each device to the same household using Account → Connect another device. An internet connection is required for household data. The service worker caches only a generic offline page, not menus, preferences or authenticated responses. This is a web app, not a native App Store application.
+On iPhone or iPad, open your deployed HTTPS app in Safari and use **Share → Add to Home Screen**. On macOS Sonoma or later, use **File → Add to Dock**. Connect each device to the same household using **Invite family**. An internet connection is required for household data. The service worker caches only a generic offline page, not menus, preferences or authenticated responses. This is a web app, not a native App Store application.
 
 ## Zomato integration status
 
